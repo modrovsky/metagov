@@ -84,21 +84,33 @@ See `.env.example` for the full list with comments.
 
 ## Deployment
 
-The bot must run continuously. Use any of:
+The bot must run continuously. State is persisted to `DATA_DIR` (default: `data/`) -- make sure this survives restarts.
+
+### Railway (recommended)
+
+1. Push this repo to GitHub
+2. Go to [railway.com](https://railway.app) and create a new project
+3. Select "Deploy from GitHub repo" and connect this repo
+4. Go to **Variables** and add your 3 required env vars: `BOT_PRIVATE_KEY`, `SAFE_ADDRESS`, `SNAPSHOT_SPACE_ID`
+5. Add a **Volume** mounted at `/app/data` (this persists state across deploys)
+6. Railway auto-detects Node.js, runs `npm run build` and `npm start`
+7. Set `DRY_RUN=true` first to verify everything works, then remove it
+
+Railway usage for this bot is very light -- expect under $2/month.
+
+### Docker
 
 ```bash
-# Docker
 docker build -t metagov .
 docker run --env-file .env -v metagov-data:/app/data metagov
-
-# PM2
-npm run build
-pm2 start dist/index.js --name metagov
-
-# systemd, Railway, Render, etc.
 ```
 
-State is persisted to `DATA_DIR` (default: `data/`). Make sure this directory survives restarts (use a Docker volume, persistent disk, etc).
+### PM2
+
+```bash
+npm run build
+pm2 start dist/index.js --name metagov
+```
 
 ## Architecture
 
@@ -116,9 +128,29 @@ src/
     wallet.ts                 # Ethers provider + wallet setup
 ```
 
+## Vote formatting
+
+When the bot executes a vote on-chain, it includes a detailed reason showing how your community voted on Snapshot. The on-chain vote reason looks like this:
+
+```
+**FOR 12 VOTES**
+
+**toady.eth** | *"Great proposal, fully support this"*
+**nounslover.eth**
+**0xABCD...1234**
+
+**AGAINST 3 VOTES**
+
+**someguy.eth** | *"Too expensive"*
+
+**ABSTAIN 0 VOTES**
+```
+
+Voter names are resolved in order: Snapshot profile name > ENS name > truncated address. Reasons are included when voters leave them on Snapshot.
+
 ## Notes
 
-- **Gas refunds**: Gas is paid by the bot wallet, but Nouns DAO refunds gas to the Safe (not the bot). Periodically sweep the Safe back to the bot wallet.
+- **Gas refunds**: Gas is paid by the bot wallet and Nouns DAO refunds it back to the bot.
 - **Safe API key**: Purely optional. It only records transactions in Safe's web UI for visibility. All execution uses the bot's private key directly.
 - **Deduplication**: The bot has triple-layer deduplication (memory + Snapshot API + local state file) to prevent re-posting proposals across restarts.
 - **Private key format**: Works with or without the `0x` prefix -- paste it however you have it.
