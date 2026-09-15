@@ -26,26 +26,71 @@ function ensureDir(): void {
   }
 }
 
+function writeJsonAtomically(filePath: string, value: unknown): void {
+  ensureDir();
+  const temporaryPath = `${filePath}.${process.pid}.${Date.now()}.tmp`;
+  const json = JSON.stringify(
+    value,
+    (_, item) => typeof item === 'bigint' ? item.toString() : item,
+    2,
+  );
+
+  try {
+    fs.writeFileSync(temporaryPath, json);
+    fs.renameSync(temporaryPath, filePath);
+  } catch (error) {
+    try {
+      fs.unlinkSync(temporaryPath);
+    } catch {
+      // The temporary file may not have been created.
+    }
+    throw error;
+  }
+}
+
+function isStateData(value: unknown): value is StateData {
+  if (!value || typeof value !== 'object') return false;
+  const ids = (value as StateData).postedProposalIds;
+  return Array.isArray(ids) && ids.every(id => typeof id === 'string');
+}
+
+function isExecutedVote(value: unknown): value is ExecutedVote {
+  if (!value || typeof value !== 'object') return false;
+  const vote = value as ExecutedVote;
+  return (
+    typeof vote.nounsProposalId === 'string' &&
+    typeof vote.snapshotId === 'string' &&
+    ['FOR', 'AGAINST', 'ABSTAIN'].includes(vote.choice) &&
+    typeof vote.safeTxHash === 'string' &&
+    typeof vote.executionTxHash === 'string' &&
+    Number.isSafeInteger(vote.blockNumber) &&
+    typeof vote.gasUsed === 'string' &&
+    typeof vote.executedAt === 'string'
+  );
+}
+
 export function loadPostedProposals(): Set<string> {
   try {
     if (!fs.existsSync(STATE_FILE)) {
       return new Set();
     }
     const raw = fs.readFileSync(STATE_FILE, 'utf-8');
-    const data: StateData = JSON.parse(raw);
-    return new Set(data.postedProposalIds || []);
+    const data: unknown = JSON.parse(raw);
+    if (!isStateData(data)) {
+      throw new Error('posted-proposals.json has an invalid structure');
+    }
+    return new Set(data.postedProposalIds);
   } catch (error) {
     console.error('Error reading state file:', error);
-    return new Set();
+    throw error;
   }
 }
 
 export function savePostedProposals(ids: Set<string>): void {
-  ensureDir();
   const data: StateData = {
     postedProposalIds: Array.from(ids),
   };
-  fs.writeFileSync(STATE_FILE, JSON.stringify(data, null, 2));
+  writeJsonAtomically(STATE_FILE, data);
 }
 
 export function appendPostedProposal(id: string): void {
@@ -62,16 +107,19 @@ export function loadExecutedVotes(): ExecutedVote[] {
       return [];
     }
     const raw = fs.readFileSync(EXECUTED_VOTES_FILE, 'utf-8');
-    return JSON.parse(raw) as ExecutedVote[];
+    const data: unknown = JSON.parse(raw);
+    if (!Array.isArray(data) || !data.every(isExecutedVote)) {
+      throw new Error('executed-votes.json has an invalid structure');
+    }
+    return data;
   } catch (error) {
     console.error('Error reading executed votes file:', error);
-    return [];
+    throw error;
   }
 }
 
 export function appendExecutedVote(vote: ExecutedVote): void {
-  ensureDir();
   const existing = loadExecutedVotes();
   existing.push(vote);
-  fs.writeFileSync(EXECUTED_VOTES_FILE, JSON.stringify(existing, (_, v) => typeof v === 'bigint' ? v.toString() : v, 2));
+  writeJsonAtomically(EXECUTED_VOTES_FILE, existing);
 }
