@@ -1,25 +1,34 @@
 # Metagov
 
-Metagovernance automation bot for Nouns DAO. Mirrors Nouns proposals to a Snapshot space so your community can vote, then automatically executes the winning vote on-chain through a Safe multisig.
+Hey everybody — this is a reusable version of the metagovernance automation I built for the League of Lils.
 
-## How it works
+It is intended to be cloned or forked by other Nounish DAOs that participate in Nouns DAO governance. The bot mirrors new Nouns DAO proposals into your community's Snapshot space, lets your token holders decide how your DAO should vote, and then submits the result onchain through your Safe.
 
-1. **Polls** for new Nouns DAO proposals via a GraphQL subgraph
-2. **Creates** a corresponding Snapshot proposal in your space (For / Against / Abstain)
-3. **Waits** for the Snapshot vote to close
-4. **Executes** the winning vote on-chain through your Safe wallet
+The whole loop is automated:
 
-## Prerequisites
+1. A proposal appears on Nouns DAO.
+2. The bot creates a matching Snapshot proposal for your community.
+3. Your community votes For, Against, or Abstain.
+4. When the Snapshot vote closes, the bot submits the winning choice through your Safe.
 
-- **Node.js 18+**
-- **A Safe multisig** on Ethereum mainnet
-  - The Safe must hold Nouns voting power (be a delegate)
-  - Threshold must be 1
-- **A bot wallet (EOA)** added as a signer on the Safe
-  - Funded with ~0.1 ETH for gas
-- **A Snapshot space** configured for your organization
+The goal is simple: communities can participate consistently without relying on someone to manually create every Snapshot proposal or remember to cast the final vote before the Nouns voting window closes.
 
-## Quick start
+## Before you run it
+
+You will need:
+
+- Node.js 18 or newer
+- A Snapshot space for your community
+- A Safe on Ethereum mainnet that holds delegated Nouns voting power
+- A dedicated bot wallet added as an owner of that Safe
+- A Safe threshold of 1, so the bot can execute the community's decision
+- Some ETH in the bot wallet to pay transaction gas
+
+That last part is important: this setup gives the bot wallet the ability to execute transactions from a threshold-1 Safe. Use a dedicated Safe and bot wallet, and understand that trust assumption before deploying it.
+
+## Set it up
+
+Clone the repository and install the dependencies:
 
 ```bash
 git clone <your-repo-url>
@@ -28,137 +37,107 @@ npm install
 cp .env.example .env
 ```
 
-Edit `.env` -- you only need to fill in 3 values:
+Open `.env` and fill in these three values:
 
 ```env
-BOT_PRIVATE_KEY=your_private_key_here
+BOT_PRIVATE_KEY=your_private_key
 SAFE_ADDRESS=0xYourSafeAddress
 SNAPSHOT_SPACE_ID=yourdao.eth
 ```
 
-Test it first:
+The private key may include the `0x` prefix or omit it. Never commit `.env`.
+
+Check the setup before starting the bot:
+
 ```bash
 npm run doctor
+```
+
+The doctor checks the RPC connection, bot wallet, Safe ownership and threshold, Nouns indexer, Snapshot settings, and state directory.
+
+Then run it in dry-run mode:
+
+```bash
 DRY_RUN=true npm run dev
 ```
 
-Run for real:
+Dry-run mode reads live data and prints what the bot would do without publishing proposals, writing bot state, or sending transactions.
+
+When everything looks right:
+
 ```bash
 npm run build
 npm start
 ```
 
-## Configuration
+## Organization profiles
 
-Everything is controlled via `.env`. Only 3 values are required -- everything else has sensible defaults.
+You can keep public organization settings in a small JSON profile instead of repeating them in deployment variables.
 
-For repeatable organization settings, copy `profiles/example.json` to a new name and set
-`METAGOV_PROFILE=mydao`. Profiles contain only public settings; keep `BOT_PRIVATE_KEY` and
-`SAFE_API_KEY` in environment variables. Environment variables always override profile values.
+Copy `profiles/example.json` to something like `profiles/mydao.json`, edit it, and set:
 
-### Required
+```env
+METAGOV_PROFILE=mydao
+BOT_PRIVATE_KEY=your_private_key
+```
 
-| Variable | Description |
-|----------|-------------|
-| `BOT_PRIVATE_KEY` | Bot wallet private key (with or without `0x` prefix) |
-| `SAFE_ADDRESS` | Your Safe multisig address |
-| `SNAPSHOT_SPACE_ID` | Your Snapshot space (e.g. `mydao.eth`) |
+Environment variables override profile values. Private keys and Safe API keys do not belong in profiles; keep those in your environment.
 
-### Optional
+Profiles are optional. Using only `.env` is perfectly fine for a single deployment.
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `METAGOV_PROFILE` | _(none)_ | Profile name from `profiles/` or path to a JSON profile |
-| `ORGANIZATION_NAME` | Profile name or `Metagov` | Name shown in startup logs |
-| `ETHEREUM_RPC_URL` | Public LlamaRPC | Any Ethereum mainnet RPC |
-| `NOUNS_GRAPHQL_ENDPOINT` | Public Goldsky subgraph | Nouns subgraph URL. Ask your indexer provider for a URL if needed |
-| `NOUNS_DAO_ADDRESS` | Nouns DAO mainnet | Nouns DAO contract |
-| `SAFE_API_KEY` | _(none)_ | Safe Transaction Service JWT. Optional -- only shows txs in Safe web UI |
-| `CLIENT_ID` | `0` | Nouns client incentives ID (register at vote.wtf/clients) |
-| `SNAPSHOT_VOTING_DELAY_SECONDS` | Snapshot space setting | Override the delay before Snapshot voting starts |
-| `VOTING_DURATION_DAYS` | Snapshot space setting | Override how long Snapshot votes stay open |
-| `NO_VOTES_ACTION` | `abstain` | What to do if nobody votes: `abstain` or `skip` |
-| `MIN_PROPOSAL_ID` | `0` | Ignore proposals before this ID |
-| `LOOKBACK_DAYS` | `7` | How far back to scan on startup |
-| `PROPOSAL_LINK_TEMPLATE` | `https://nouns.wtf/vote/{id}` | Link in Snapshot proposal body + discussion |
-| `PROPOSAL_POLL_MINUTES` | `1` | How often to check for new proposals |
-| `VOTE_POLL_MINUTES` | `5` | How often to check for closed votes |
-| `DATA_DIR` | `data` | Where to store state files (useful for Docker volumes) |
-| `MAX_GAS_PRICE_GWEI` | `100` | Max gas price before deferring a vote |
-| `MAX_RETRIES` | `3` | Retry attempts for failed vote execution |
-| `DRY_RUN` | `false` | Log actions without executing |
+## Useful settings
 
-See `.env.example` for the full list with comments.
+Most deployments only need the three required values. A few settings you may care about are:
 
-## Deployment
+```env
+# Use a different Ethereum RPC or Nouns indexer
+ETHEREUM_RPC_URL=https://eth.llamarpc.com
+NOUNS_GRAPHQL_ENDPOINT=
 
-The bot must run continuously. State is persisted to `DATA_DIR` (default: `data/`) -- make sure this survives restarts.
+# Register a client ID at vote.wtf/clients if desired
+CLIENT_ID=0
 
-### Railway (recommended)
+# Ignore older Nouns proposals when starting a new deployment
+MIN_PROPOSAL_ID=0
 
-1. Push this repo to GitHub
-2. Go to [railway.com](https://railway.app) and create a new project
-3. Select "Deploy from GitHub repo" and connect this repo
-4. Go to **Variables** and add your 3 required env vars: `BOT_PRIVATE_KEY`, `SAFE_ADDRESS`, `SNAPSHOT_SPACE_ID`
-5. Add a **Volume** mounted at `/app/data` (this persists state across deploys)
-6. Railway auto-detects Node.js, runs `npm run build` and `npm start`
-7. Set `DRY_RUN=true` first to verify everything works, then remove it
+# Abstain or skip when nobody votes on Snapshot
+NO_VOTES_ACTION=abstain
 
-Railway usage for this bot is very light -- expect under $2/month.
+# Avoid submitting during unusually expensive gas conditions
+MAX_GAS_PRICE_GWEI=100
 
-### Docker
+# Store persistent bot state somewhere else
+DATA_DIR=data
+```
+
+Proposal timing follows your Snapshot space settings. If necessary, you can override it with `SNAPSHOT_VOTING_DELAY_SECONDS` and `VOTING_DURATION_DAYS`. The full list of available settings and comments lives in `.env.example`.
+
+## Deploying it
+
+The bot needs to run continuously, and its `data` directory must survive restarts. That directory records which proposals were posted and which votes were executed.
+
+On Railway, deploy the repository, add your environment variables, and mount a persistent volume at `/app/data`.
+
+With Docker:
 
 ```bash
 docker build -t metagov .
 docker run --env-file .env -v metagov-data:/app/data metagov
 ```
 
-### PM2
+With PM2:
 
 ```bash
 npm run build
 pm2 start dist/index.js --name metagov
 ```
 
-## Architecture
+## A few operational notes
 
-```
-src/
-  index.ts                    # Main loop + cron scheduling
-  config.ts                   # Environment-based configuration
-  listeners/
-    nounsProposals.ts         # Polls Nouns subgraph for new proposals
-  services/
-    snapshot.ts               # Create/cancel Snapshot proposals, read results
-    safeVoting.ts             # Execute votes through Safe + format vote reasons
-    stateStore.ts             # Local JSON file persistence
-  utils/
-    wallet.ts                 # Ethers provider + wallet setup
-```
+- The bot checks both local state and Snapshot before creating proposals, helping prevent duplicates across restarts.
+- If a Nouns proposal is cancelled or vetoed, the matching active Snapshot proposal is cancelled too.
+- The onchain vote reason includes the Snapshot totals, voter names, and any reasons voters supplied.
+- The bot wallet pays for the outer Safe transaction. The Nouns DAO gas refund is paid to the Safe because the Safe is the address calling the Nouns DAO contract.
+- `SAFE_API_KEY` is optional. It only records transactions with the Safe Transaction Service for visibility in the Safe interface.
 
-## Vote formatting
-
-When the bot executes a vote on-chain, it includes a detailed reason showing how your community voted on Snapshot. The on-chain vote reason looks like this:
-
-```
-**FOR 12 VOTES**
-
-**toady.eth** | *"Great proposal, fully support this"*
-**nounslover.eth**
-**0xABCD...1234**
-
-**AGAINST 3 VOTES**
-
-**someguy.eth** | *"Too expensive"*
-
-**ABSTAIN 0 VOTES**
-```
-
-Voter names are resolved in order: Snapshot profile name > ENS name > truncated address. Reasons are included when voters leave them on Snapshot.
-
-## Notes
-
-- **Gas refunds**: Gas is paid by the bot wallet and Nouns DAO refunds it back to the bot.
-- **Safe API key**: Purely optional. It only records transactions in Safe's web UI for visibility. All execution uses the bot's private key directly.
-- **Deduplication**: The bot has triple-layer deduplication (memory + Snapshot API + local state file) to prevent re-posting proposals across restarts.
-- **Private key format**: Works with or without the `0x` prefix -- paste it however you have it.
+This project came from a bot running for the League of Lils. Metagov is the generalized version so other Nounish communities can use the same workflow without rebuilding it from scratch.
