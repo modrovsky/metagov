@@ -19,6 +19,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 
 COPY --from=builder /app/dist ./dist
+COPY profiles ./profiles
 
 # Default state directory — mount a volume here to persist across restarts
 ENV DATA_DIR=/app/data

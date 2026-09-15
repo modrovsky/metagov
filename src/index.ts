@@ -209,7 +209,7 @@ function logStatus(): void {
 }
 
 async function main(): Promise<void> {
-  console.log('Metagov Bot starting...\n');
+  console.log(`${config.organizationName} Metagov Bot starting...\n`);
 
   try {
     validateConfig();
@@ -222,6 +222,7 @@ async function main(): Promise<void> {
   console.log(`Wallet:   ${walletAddress}`);
   console.log(`Safe:     ${config.safeAddress}`);
   console.log(`Space:    ${config.snapshotSpaceId}`);
+  if (config.profileSource) console.log(`Profile:  ${config.profileSource}`);
   console.log(`Dry Run:  ${config.dryRun}`);
   console.log('');
 

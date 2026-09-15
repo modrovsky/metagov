@@ -1,5 +1,8 @@
 import dotenv from 'dotenv';
+import { loadOrganizationProfile } from './profile';
 dotenv.config();
+
+const { profile, source: profileSource } = loadOrganizationProfile();
 
 // Strip 0x prefix if someone pastes it
 function cleanPrivateKey(key: string): string {
@@ -7,6 +10,10 @@ function cleanPrivateKey(key: string): string {
 }
 
 export const config = {
+  // Organization profile (public settings only; environment variables win)
+  organizationName: process.env.ORGANIZATION_NAME || profile.name || 'Metagov',
+  profileSource,
+
   // RPC & Chain
   ethereumRpcUrl: process.env.ETHEREUM_RPC_URL || 'https://eth.llamarpc.com',
   chainId: 1,
@@ -15,7 +22,7 @@ export const config = {
   botPrivateKey: cleanPrivateKey(process.env.BOT_PRIVATE_KEY || ''),
 
   // Safe
-  safeAddress: process.env.SAFE_ADDRESS || '',
+  safeAddress: process.env.SAFE_ADDRESS || profile.safeAddress || '',
   safeApiKey: process.env.SAFE_API_KEY || '',
 
   // GraphQL Endpoints
@@ -24,13 +31,15 @@ export const config = {
   snapshotGraphql: 'https://hub.snapshot.org/graphql',
 
   // Snapshot Space
-  snapshotSpaceId: process.env.SNAPSHOT_SPACE_ID || '',
+  snapshotSpaceId: process.env.SNAPSHOT_SPACE_ID || profile.snapshotSpaceId || '',
 
   // Contract Addresses
   nounsDaoAddress: process.env.NOUNS_DAO_ADDRESS || '0x6f3E6272A167e8AcCb32072d08E0957F9c79223d',
 
   // Nouns client incentives ID
-  clientId: parseInt(process.env.CLIENT_ID || '0'),
+  clientId: process.env.CLIENT_ID !== undefined
+    ? parseInt(process.env.CLIENT_ID)
+    : profile.clientId ?? 0,
 
   // Optional Snapshot timing overrides. By default, use the space settings.
   snapshotVotingDelaySeconds: process.env.SNAPSHOT_VOTING_DELAY_SECONDS
@@ -41,13 +50,13 @@ export const config = {
     : undefined,
 
   // URL template for proposal links ({id} is replaced with Nouns proposal ID)
-  proposalLinkTemplate: process.env.PROPOSAL_LINK_TEMPLATE || 'https://nouns.wtf/vote/{id}',
+  proposalLinkTemplate: process.env.PROPOSAL_LINK_TEMPLATE || profile.proposalLinkTemplate || 'https://nouns.wtf/vote/{id}',
 
   // Block explorer URL for tx links in logs
   blockExplorerTxUrl: 'https://etherscan.io/tx/',
 
   // What to do when no Snapshot votes are cast: "abstain" or "skip"
-  noVotesAction: (process.env.NO_VOTES_ACTION || 'abstain').toLowerCase() as 'abstain' | 'skip',
+  noVotesAction: (process.env.NO_VOTES_ACTION || profile.noVotesAction || 'abstain').toLowerCase() as 'abstain' | 'skip',
 
   // Polling intervals (minutes)
   proposalPollMinutes: parseInt(process.env.PROPOSAL_POLL_MINUTES || '1'),
@@ -80,7 +89,7 @@ export function validateConfig(): void {
 
   for (const key of required) {
     if (!config[key]) {
-      throw new Error(`Missing required config: ${key} (set via env var)`);
+      throw new Error(`Missing required config: ${key} (set it via environment variable or profile)`);
     }
   }
 
@@ -164,5 +173,9 @@ export function validateConfig(): void {
 
   if (!config.proposalLinkTemplate.includes('{id}')) {
     throw new Error('PROPOSAL_LINK_TEMPLATE must contain the {id} placeholder');
+  }
+
+  if (!config.organizationName.trim()) {
+    throw new Error('ORGANIZATION_NAME or profile name cannot be empty');
   }
 }

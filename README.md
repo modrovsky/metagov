@@ -52,6 +52,10 @@ npm start
 
 Everything is controlled via `.env`. Only 3 values are required -- everything else has sensible defaults.
 
+For repeatable organization settings, copy `profiles/example.json` to a new name and set
+`METAGOV_PROFILE=mydao`. Profiles contain only public settings; keep `BOT_PRIVATE_KEY` and
+`SAFE_API_KEY` in environment variables. Environment variables always override profile values.
+
 ### Required
 
 | Variable | Description |
@@ -64,6 +68,8 @@ Everything is controlled via `.env`. Only 3 values are required -- everything el
 
 | Variable | Default | Description |
 |----------|---------|-------------|
+| `METAGOV_PROFILE` | _(none)_ | Profile name from `profiles/` or path to a JSON profile |
+| `ORGANIZATION_NAME` | Profile name or `Metagov` | Name shown in startup logs |
 | `ETHEREUM_RPC_URL` | Public LlamaRPC | Any Ethereum mainnet RPC |
 | `NOUNS_GRAPHQL_ENDPOINT` | Public Goldsky subgraph | Nouns subgraph URL. Ask your indexer provider for a URL if needed |
 | `NOUNS_DAO_ADDRESS` | Nouns DAO mainnet | Nouns DAO contract |

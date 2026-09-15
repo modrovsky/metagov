@@ -22,6 +22,7 @@ async function main(): Promise<void> {
 
   validateConfig();
   console.log('✓ Configuration: valid');
+  if (config.profileSource) console.log(`✓ Profile: ${config.organizationName} (${config.profileSource})`);
 
   const provider = getProvider();
   const wallet = getWallet();

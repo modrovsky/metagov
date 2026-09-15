@@ -1,0 +1,8 @@
+{
+  "name": "Example DAO",
+  "safeAddress": "0x0000000000000000000000000000000000000000",
+  "snapshotSpaceId": "example.eth",
+  "clientId": 0,
+  "proposalLinkTemplate": "https://nouns.wtf/vote/{id}",
+  "noVotesAction": "abstain"
+}
