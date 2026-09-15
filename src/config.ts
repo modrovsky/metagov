@@ -32,11 +32,13 @@ export const config = {
   // Nouns client incentives ID
   clientId: parseInt(process.env.CLIENT_ID || '0'),
 
-  // Snapshot voting duration (seconds)
-  votingDurationDays: parseInt(process.env.VOTING_DURATION_DAYS || '5'),
-  get snapshotVotingDuration(): number {
-    return this.votingDurationDays * 24 * 60 * 60;
-  },
+  // Optional Snapshot timing overrides. By default, use the space settings.
+  snapshotVotingDelaySeconds: process.env.SNAPSHOT_VOTING_DELAY_SECONDS
+    ? parseInt(process.env.SNAPSHOT_VOTING_DELAY_SECONDS)
+    : undefined,
+  votingDurationDays: process.env.VOTING_DURATION_DAYS
+    ? parseFloat(process.env.VOTING_DURATION_DAYS)
+    : undefined,
 
   // URL template for proposal links ({id} is replaced with Nouns proposal ID)
   proposalLinkTemplate: process.env.PROPOSAL_LINK_TEMPLATE || 'https://nouns.wtf/vote/{id}',

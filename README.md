@@ -68,7 +68,8 @@ Everything is controlled via `.env`. Only 3 values are required -- everything el
 | `NOUNS_DAO_ADDRESS` | Nouns DAO mainnet | Nouns DAO contract |
 | `SAFE_API_KEY` | _(none)_ | Safe Transaction Service JWT. Optional -- only shows txs in Safe web UI |
 | `CLIENT_ID` | `0` | Nouns client incentives ID (register at vote.wtf/clients) |
-| `VOTING_DURATION_DAYS` | `5` | How long Snapshot votes stay open |
+| `SNAPSHOT_VOTING_DELAY_SECONDS` | Snapshot space setting | Override the delay before Snapshot voting starts |
+| `VOTING_DURATION_DAYS` | Snapshot space setting | Override how long Snapshot votes stay open |
 | `NO_VOTES_ACTION` | `abstain` | What to do if nobody votes: `abstain` or `skip` |
 | `MIN_PROPOSAL_ID` | `0` | Ignore proposals before this ID |
 | `LOOKBACK_DAYS` | `7` | How far back to scan on startup |

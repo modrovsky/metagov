@@ -25,12 +25,57 @@ export interface SnapshotProposalReceipt {
 
 export type VoteResult = 'FOR' | 'AGAINST' | 'ABSTAIN' | 'NO_VOTES' | null;
 
+const GET_SPACE_VOTING_SETTINGS = gql`
+  query SpaceVotingSettings($id: String!) {
+    space(id: $id) {
+      voting {
+        delay
+        period
+      }
+    }
+  }
+`;
+
+async function getProposalTiming(): Promise<{ delay: number; period: number }> {
+  const { data } = await graphqlClient.query<any>({
+    query: GET_SPACE_VOTING_SETTINGS,
+    variables: { id: config.snapshotSpaceId },
+    fetchPolicy: 'network-only',
+  });
+
+  const spaceVoting = data.space?.voting;
+  const delay = config.snapshotVotingDelaySeconds ?? spaceVoting?.delay;
+  const period = config.votingDurationDays !== undefined
+    ? config.votingDurationDays * 24 * 60 * 60
+    : spaceVoting?.period;
+
+  if (!Number.isSafeInteger(delay) || delay < 0) {
+    throw new Error(
+      `Snapshot space ${config.snapshotSpaceId} has no valid voting delay; ` +
+      'configure it in Snapshot or set SNAPSHOT_VOTING_DELAY_SECONDS'
+    );
+  }
+
+  if (!Number.isSafeInteger(period) || period <= 0) {
+    throw new Error(
+      `Snapshot space ${config.snapshotSpaceId} has no valid voting period; ` +
+      'configure it in Snapshot or set VOTING_DURATION_DAYS'
+    );
+  }
+
+  return { delay, period };
+}
+
 export async function createSnapshotProposal(
   nounsProposal: NounsProposal
 ): Promise<SnapshotProposalReceipt> {
   const wallet = getSnapshotWallet();
-  const blockNumber = await getBlockNumber();
+  const [blockNumber, timing] = await Promise.all([
+    getBlockNumber(),
+    getProposalTiming(),
+  ]);
   const now = Math.floor(Date.now() / 1000);
+  const start = now + timing.delay;
 
   const proposalData = {
     space: config.snapshotSpaceId,
@@ -38,8 +83,8 @@ export async function createSnapshotProposal(
     title: `${nounsProposal.id}: ${nounsProposal.title}`,
     body: formatProposalBody(nounsProposal),
     choices: ['For', 'Against', 'Abstain'],
-    start: now,
-    end: now + config.snapshotVotingDuration,
+    start,
+    end: start + timing.period,
     snapshot: blockNumber,
     plugins: JSON.stringify({}),
     discussion: config.proposalLinkTemplate.replace('{id}', nounsProposal.id),
@@ -50,7 +95,8 @@ export async function createSnapshotProposal(
     console.log(`Title: ${proposalData.title}`);
     console.log(`Body: ${proposalData.body}`);
     console.log(`Choices: ${proposalData.choices.join(' / ')}`);
-    console.log(`Duration: ${config.votingDurationDays} days`);
+    console.log(`Duration: ${timing.period / 86400} days`);
+    console.log(`Voting delay: ${timing.delay / 3600} hours`);
     console.log(`Space: ${proposalData.space}`);
     console.log('--- END PREVIEW ---\n');
     return { id: `dry-run-${nounsProposal.id}`, ipfs: '' };
