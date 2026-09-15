@@ -36,7 +36,7 @@ const GET_SPACE_VOTING_SETTINGS = gql`
   }
 `;
 
-async function getProposalTiming(): Promise<{ delay: number; period: number }> {
+export async function getSnapshotSpaceVotingSettings(): Promise<{ delay: number; period: number }> {
   const { data } = await graphqlClient.query<any>({
     query: GET_SPACE_VOTING_SETTINGS,
     variables: { id: config.snapshotSpaceId },
@@ -44,6 +44,22 @@ async function getProposalTiming(): Promise<{ delay: number; period: number }> {
   });
 
   const spaceVoting = data.space?.voting;
+  const delay = spaceVoting?.delay;
+  const period = spaceVoting?.period;
+
+  if (!Number.isSafeInteger(delay) || delay < 0) {
+    throw new Error(`Snapshot space ${config.snapshotSpaceId} has no valid voting delay`);
+  }
+
+  if (!Number.isSafeInteger(period) || period <= 0) {
+    throw new Error(`Snapshot space ${config.snapshotSpaceId} has no valid voting period`);
+  }
+
+  return { delay, period };
+}
+
+async function getProposalTiming(): Promise<{ delay: number; period: number }> {
+  const spaceVoting = await getSnapshotSpaceVotingSettings();
   const delay = config.snapshotVotingDelaySeconds ?? spaceVoting?.delay;
   const period = config.votingDurationDays !== undefined
     ? config.votingDurationDays * 24 * 60 * 60

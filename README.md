@@ -38,6 +38,7 @@ SNAPSHOT_SPACE_ID=yourdao.eth
 
 Test it first:
 ```bash
+npm run doctor
 DRY_RUN=true npm run dev
 ```
 

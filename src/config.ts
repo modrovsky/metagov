@@ -88,4 +88,81 @@ export function validateConfig(): void {
   if (!/^0x[a-fA-F0-9]{40}$/.test(config.safeAddress)) {
     throw new Error(`Invalid SAFE_ADDRESS: ${config.safeAddress}`);
   }
+
+  if (!/^[a-fA-F0-9]{64}$/.test(config.botPrivateKey)) {
+    throw new Error('BOT_PRIVATE_KEY must be a 32-byte hexadecimal private key');
+  }
+
+  if (!/^0x[a-fA-F0-9]{40}$/.test(config.nounsDaoAddress)) {
+    throw new Error(`Invalid NOUNS_DAO_ADDRESS: ${config.nounsDaoAddress}`);
+  }
+
+  for (const [name, value] of [
+    ['ETHEREUM_RPC_URL', config.ethereumRpcUrl],
+    ['NOUNS_GRAPHQL_ENDPOINT', config.nounsGraphqlEndpoint],
+    ['SNAPSHOT_HUB', config.snapshotHub],
+    ['SNAPSHOT_GRAPHQL_ENDPOINT', config.snapshotGraphql],
+  ]) {
+    try {
+      new URL(value);
+    } catch {
+      throw new Error(`${name} must be a valid URL`);
+    }
+  }
+
+  if (!Number.isSafeInteger(config.clientId) || config.clientId < 0 || config.clientId > 0xffffffff) {
+    throw new Error('CLIENT_ID must be an integer between 0 and 4294967295');
+  }
+
+  if (
+    config.snapshotVotingDelaySeconds !== undefined &&
+    (!Number.isSafeInteger(config.snapshotVotingDelaySeconds) || config.snapshotVotingDelaySeconds < 0)
+  ) {
+    throw new Error('SNAPSHOT_VOTING_DELAY_SECONDS must be a non-negative integer');
+  }
+
+  if (
+    config.votingDurationDays !== undefined &&
+    (!Number.isFinite(config.votingDurationDays) || config.votingDurationDays <= 0)
+  ) {
+    throw new Error('VOTING_DURATION_DAYS must be greater than zero');
+  }
+
+  if (!['abstain', 'skip'].includes(config.noVotesAction)) {
+    throw new Error('NO_VOTES_ACTION must be either "abstain" or "skip"');
+  }
+
+  for (const [name, value] of [
+    ['PROPOSAL_POLL_MINUTES', config.proposalPollMinutes],
+    ['VOTE_POLL_MINUTES', config.votePollMinutes],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 1 || value > 59) {
+      throw new Error(`${name} must be an integer between 1 and 59`);
+    }
+  }
+
+  for (const [name, value] of [
+    ['LOOKBACK_DAYS', config.lookbackDays],
+    ['MIN_PROPOSAL_ID', config.minProposalId],
+  ] as const) {
+    if (!Number.isSafeInteger(value) || value < 0) {
+      throw new Error(`${name} must be a non-negative integer`);
+    }
+  }
+
+  if (!Number.isFinite(config.maxGasPriceGwei) || config.maxGasPriceGwei <= 0) {
+    throw new Error('MAX_GAS_PRICE_GWEI must be greater than zero');
+  }
+
+  if (!Number.isSafeInteger(config.maxRetries) || config.maxRetries < 1 || config.maxRetries > 3) {
+    throw new Error('MAX_RETRIES must be an integer between 1 and 3');
+  }
+
+  if (!config.dataDir.trim()) {
+    throw new Error('DATA_DIR cannot be empty');
+  }
+
+  if (!config.proposalLinkTemplate.includes('{id}')) {
+    throw new Error('PROPOSAL_LINK_TEMPLATE must contain the {id} placeholder');
+  }
 }
