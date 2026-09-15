@@ -51,6 +51,16 @@ export interface ExecutionResult {
   gasUsed: string;
 }
 
+export type VoteExecutionOutcome =
+  | { status: 'executed'; execution: ExecutionResult }
+  | { status: 'deferred'; reason: string }
+  | { status: 'already-voted'; reason: string }
+  | { status: 'failed'; reason: string; retryable: boolean };
+
+type ExecutionAttemptOutcome =
+  | { status: 'executed'; execution: ExecutionResult }
+  | { status: 'failed'; reason: string; retryable: boolean };
+
 export async function hasAlreadyVoted(proposalId: string): Promise<boolean> {
   try {
     const provider = getProvider();
@@ -66,29 +76,32 @@ export async function executeVoteThroughSafe(
   proposalId: string,
   voteChoice: VoteChoice,
   formattedReason: string,
-): Promise<ExecutionResult | null> {
+): Promise<VoteExecutionOutcome> {
   // Defense in depth: callers must never be able to execute in dry-run mode.
   if (config.dryRun) {
     console.log(`[DRY RUN] Would vote ${voteChoice} on Nouns #${proposalId} through the Safe`);
-    return null;
+    return { status: 'deferred', reason: 'dry-run mode' };
   }
 
   const { voteable, status } = await isProposalVoteable(proposalId);
   if (!voteable) {
     console.log(`Cannot vote: Nouns proposal #${proposalId} is ${status}`);
-    return null;
+    const retryable = status === 'NOT_FOUND' || status === 'PENDING';
+    return retryable
+      ? { status: 'deferred', reason: `proposal is ${status}` }
+      : { status: 'failed', reason: `proposal is ${status}`, retryable: false };
   }
 
   if (await hasAlreadyVoted(proposalId)) {
     console.log(`Safe has already voted on Nouns proposal #${proposalId}, skipping`);
-    return null;
+    return { status: 'already-voted', reason: 'Safe has already voted on-chain' };
   }
 
   const provider = getProvider();
   const feeData = await provider.getFeeData();
   if (feeData.maxFeePerGas && feeData.maxFeePerGas > BigInt(config.maxGasPriceGwei) * 10n ** 9n) {
     console.warn(`Gas price too high (${ethers.formatUnits(feeData.maxFeePerGas, 'gwei')} gwei), deferring vote`);
-    return null;
+    return { status: 'deferred', reason: 'gas price exceeds configured maximum' };
   }
 
   const retryDelays = [0, 30_000, 120_000];
@@ -102,20 +115,25 @@ export async function executeVoteThroughSafe(
       ? Math.max(config.gasBufferPercent, 50)
       : config.gasBufferPercent;
 
-    const result = await attemptExecution(proposalId, voteChoice, formattedReason, bufferPercent);
-    if (result) return result;
+    const outcome = await attemptExecution(proposalId, voteChoice, formattedReason, bufferPercent);
+    if (outcome.status === 'executed') return outcome;
 
-    if (result === null && attempt < config.maxRetries - 1) {
+    if (!outcome.retryable) {
+      console.error(`  Terminal execution failure: ${outcome.reason}`);
+      return outcome;
+    }
+
+    if (attempt < config.maxRetries - 1) {
       const recheck = await isProposalVoteable(proposalId);
       if (!recheck.voteable) {
         console.log(`  Proposal #${proposalId} is no longer voteable (${recheck.status}), stopping retries`);
-        return null;
+        return { status: 'failed', reason: `proposal is ${recheck.status}`, retryable: false };
       }
     }
   }
 
   console.error(`  All ${config.maxRetries} attempts failed for proposal #${proposalId}`);
-  return null;
+  return { status: 'failed', reason: 'retry limit reached', retryable: true };
 }
 
 async function attemptExecution(
@@ -123,7 +141,7 @@ async function attemptExecution(
   voteChoice: VoteChoice,
   formattedReason: string,
   bufferPercent: number,
-): Promise<ExecutionResult | null> {
+): Promise<ExecutionAttemptOutcome> {
   try {
     const protocolKit = await Safe.init({
       provider: config.ethereumRpcUrl,
@@ -207,21 +225,26 @@ async function attemptExecution(
 
     if (!receipt || receipt.status === 0) {
       console.error(`  Tx reverted onchain: ${txHash}`);
-      return null;
+      return { status: 'failed', reason: `transaction ${txHash} reverted on-chain`, retryable: false };
     }
 
     console.log(`Vote executed for Nouns #${proposalId}: ${voteChoice}`);
     console.log(`  Tx: ${config.blockExplorerTxUrl}${txHash}`);
 
     return {
-      safeTxHash,
-      executionTxHash: txHash,
-      blockNumber: Number(receipt.blockNumber),
-      gasUsed: receipt.gasUsed.toString(),
+      status: 'executed',
+      execution: {
+        safeTxHash,
+        executionTxHash: txHash,
+        blockNumber: Number(receipt.blockNumber),
+        gasUsed: receipt.gasUsed.toString(),
+      },
     };
   } catch (error: any) {
-    console.error(`  Execution attempt failed: ${error.message || error}`);
-    return null;
+    const reason = error.message || String(error);
+    const revertedOnchain = error.receipt?.status === 0;
+    console.error(`  Execution attempt failed: ${reason}`);
+    return { status: 'failed', reason, retryable: !revertedOnchain };
   }
 }
 

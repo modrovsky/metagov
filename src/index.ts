@@ -118,9 +118,10 @@ async function checkForClosedVotes(): Promise<void> {
           continue;
         }
 
-        const execution = await executeVoteThroughSafe(nounsId, voteData.choice, voteData.reason);
+        const outcome = await executeVoteThroughSafe(nounsId, voteData.choice, voteData.reason);
 
-        if (execution) {
+        if (outcome.status === 'executed') {
+          const execution = outcome.execution;
           appendExecutedVote({
             nounsProposalId: nounsId,
             snapshotId,
@@ -133,8 +134,14 @@ async function checkForClosedVotes(): Promise<void> {
           });
           submittedVotes.add(snapshotId);
           pendingVotes.delete(snapshotId);
+        } else if (outcome.status === 'already-voted') {
+          submittedVotes.add(snapshotId);
+          pendingVotes.delete(snapshotId);
+        } else if (outcome.status === 'failed' && !outcome.retryable) {
+          console.error(`  Vote execution stopped and requires manual review: ${outcome.reason}`);
+          pendingVotes.delete(snapshotId);
         } else {
-          console.log(`  Could not execute vote (will retry next cycle if proposal is still active)`);
+          console.log(`  Vote deferred: ${outcome.reason} (will retry next cycle)`);
         }
       } catch (error) {
         console.error(`Error checking vote for ${snapshotId}:`, error);
