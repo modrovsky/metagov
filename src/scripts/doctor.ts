@@ -3,7 +3,7 @@ import path from 'path';
 import { ethers } from 'ethers';
 import { config, validateConfig } from '../config';
 import { fetchNewProposals } from '../listeners/nounsProposals';
-import { getSnapshotSpaceVotingSettings } from '../services/snapshot';
+import { getProposalTiming } from '../services/snapshot';
 import { getProvider, getWallet } from '../utils/wallet';
 
 interface CheckResult {
@@ -70,7 +70,7 @@ async function main(): Promise<void> {
   });
 
   await check('Snapshot space', async () => {
-    const voting = await getSnapshotSpaceVotingSettings();
+    const voting = await getProposalTiming();
     return `delay ${voting.delay}s, period ${voting.period}s`;
   });
 

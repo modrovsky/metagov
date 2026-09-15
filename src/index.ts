@@ -14,9 +14,21 @@ let persistedProposals = new Set<string>();
 
 const pendingVotes = new Map<string, string>();
 const submittedVotes = new Set<string>();
+let isCheckingProposals = false;
 let isExecutingVotes = false;
 
 async function checkForNewProposals(): Promise<void> {
+  if (isCheckingProposals) return;
+  isCheckingProposals = true;
+
+  try {
+    await checkForNewProposalsOnce();
+  } finally {
+    isCheckingProposals = false;
+  }
+}
+
+async function checkForNewProposalsOnce(): Promise<void> {
   const fetchedProposals = await fetchNewProposals(lastCheckedTimestamp);
   if (fetchedProposals === null) {
     console.warn('Proposal cursor was not advanced because the indexer request failed');

@@ -36,31 +36,19 @@ const GET_SPACE_VOTING_SETTINGS = gql`
   }
 `;
 
-export async function getSnapshotSpaceVotingSettings(): Promise<{ delay: number; period: number }> {
+export async function getProposalTiming(): Promise<{ delay: number; period: number }> {
   const { data } = await graphqlClient.query<any>({
     query: GET_SPACE_VOTING_SETTINGS,
     variables: { id: config.snapshotSpaceId },
     fetchPolicy: 'network-only',
   });
 
-  const spaceVoting = data.space?.voting;
-  const delay = spaceVoting?.delay;
-  const period = spaceVoting?.period;
-
-  if (!Number.isSafeInteger(delay) || delay < 0) {
-    throw new Error(`Snapshot space ${config.snapshotSpaceId} has no valid voting delay`);
+  if (!data.space) {
+    throw new Error(`Snapshot space ${config.snapshotSpaceId} was not found`);
   }
 
-  if (!Number.isSafeInteger(period) || period <= 0) {
-    throw new Error(`Snapshot space ${config.snapshotSpaceId} has no valid voting period`);
-  }
-
-  return { delay, period };
-}
-
-async function getProposalTiming(): Promise<{ delay: number; period: number }> {
-  const spaceVoting = await getSnapshotSpaceVotingSettings();
-  const delay = config.snapshotVotingDelaySeconds ?? spaceVoting?.delay;
+  const spaceVoting = data.space.voting;
+  const delay = config.snapshotVotingDelaySeconds ?? spaceVoting?.delay ?? 0;
   const period = config.votingDurationDays !== undefined
     ? config.votingDurationDays * 24 * 60 * 60
     : spaceVoting?.period;
@@ -252,7 +240,9 @@ export async function getExistingProposalTitles(): Promise<Set<string>> {
     return titles;
   } catch (error) {
     console.error('Error fetching existing Snapshot proposals:', error);
-    return new Set();
+    throw new Error('Could not verify existing Snapshot proposals; refusing to continue', {
+      cause: error,
+    });
   }
 }
 
