@@ -66,7 +66,7 @@ function normalizeProposal(raw: any): NounsProposal {
   };
 }
 
-export async function fetchNewProposals(sinceTimestamp: number): Promise<NounsProposal[]> {
+export async function fetchNewProposals(sinceTimestamp: number): Promise<NounsProposal[] | null> {
   try {
     const { data } = await client.query<any>({
       query: GET_RECENT_PROPOSALS,
@@ -78,7 +78,7 @@ export async function fetchNewProposals(sinceTimestamp: number): Promise<NounsPr
     return raw.map(normalizeProposal);
   } catch (error) {
     console.error('Error fetching proposals:', error);
-    return [];
+    return null;
   }
 }
 

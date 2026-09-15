@@ -17,7 +17,15 @@ const submittedVotes = new Set<string>();
 let isExecutingVotes = false;
 
 async function checkForNewProposals(): Promise<void> {
-  const newProposals = await fetchNewProposals(lastCheckedTimestamp);
+  const fetchedProposals = await fetchNewProposals(lastCheckedTimestamp);
+  if (fetchedProposals === null) {
+    console.warn('Proposal cursor was not advanced because the indexer request failed');
+    return;
+  }
+
+  const newProposals = [...fetchedProposals].sort(
+    (a, b) => parseInt(a.createdTimestamp) - parseInt(b.createdTimestamp),
+  );
 
   const toProcess = newProposals.filter(p =>
     parseInt(p.id) >= config.minProposalId &&
@@ -26,16 +34,35 @@ async function checkForNewProposals(): Promise<void> {
     !persistedProposals.has(p.id)
   );
 
-  if (toProcess.length === 0) return;
+  if (toProcess.length > 0) {
+    console.log(`[${new Date().toISOString()}] Found ${toProcess.length} new proposal(s) to post`);
+  }
 
-  console.log(`[${new Date().toISOString()}] Found ${toProcess.length} new proposal(s) to post`);
+  const advanceCursor = (proposal: typeof newProposals[number]): void => {
+    const proposalTs = parseInt(proposal.createdTimestamp);
+    if (Number.isSafeInteger(proposalTs) && proposalTs > lastCheckedTimestamp) {
+      lastCheckedTimestamp = proposalTs;
+    }
+  };
 
-  for (const proposal of toProcess) {
+  for (const proposal of newProposals) {
+    const shouldProcess =
+      parseInt(proposal.id) >= config.minProposalId &&
+      !processedProposals.has(proposal.id) &&
+      !existingSnapshotProposals.has(proposal.id) &&
+      !persistedProposals.has(proposal.id);
+
+    if (!shouldProcess) {
+      advanceCursor(proposal);
+      continue;
+    }
+
     console.log(`Processing Nouns proposal #${proposal.id}: ${proposal.title}`);
 
     if (proposal.status === 'CANCELLED' || proposal.status === 'VETOED') {
       console.log(`  Skipping — proposal is ${proposal.status}`);
       processedProposals.add(proposal.id);
+      advanceCursor(proposal);
       continue;
     }
 
@@ -43,10 +70,7 @@ async function checkForNewProposals(): Promise<void> {
       const receipt = await createSnapshotProposal(proposal);
       processedProposals.add(proposal.id);
 
-      const proposalTs = parseInt(proposal.createdTimestamp);
-      if (proposalTs > lastCheckedTimestamp) {
-        lastCheckedTimestamp = proposalTs;
-      }
+      advanceCursor(proposal);
 
       if (config.dryRun) {
         console.log(`[DRY RUN] Previewed Snapshot proposal for Nouns #${proposal.id}; state was not changed`);
@@ -58,6 +82,13 @@ async function checkForNewProposals(): Promise<void> {
       console.log(`Created Snapshot proposal for Nouns #${proposal.id} (${receipt.id})`);
     } catch (error) {
       console.error(`Error processing proposal ${proposal.id}:`, error);
+      const failedTimestamp = parseInt(proposal.createdTimestamp);
+      if (Number.isSafeInteger(failedTimestamp)) {
+        // Include every proposal sharing this timestamp on the retry query.
+        lastCheckedTimestamp = Math.min(lastCheckedTimestamp, failedTimestamp - 1);
+      }
+      console.warn(`Proposal cursor stopped before Nouns #${proposal.id} so it can be retried`);
+      break;
     }
   }
 }
