@@ -42,14 +42,20 @@ async function checkForNewProposals(): Promise<void> {
     try {
       const receipt = await createSnapshotProposal(proposal);
       processedProposals.add(proposal.id);
-      appendPostedProposal(proposal.id);
-      pendingVotes.set(receipt.id, proposal.id);
-      console.log(`Created Snapshot proposal for Nouns #${proposal.id} (${receipt.id})`);
 
       const proposalTs = parseInt(proposal.createdTimestamp);
       if (proposalTs > lastCheckedTimestamp) {
         lastCheckedTimestamp = proposalTs;
       }
+
+      if (config.dryRun) {
+        console.log(`[DRY RUN] Previewed Snapshot proposal for Nouns #${proposal.id}; state was not changed`);
+        continue;
+      }
+
+      appendPostedProposal(proposal.id);
+      pendingVotes.set(receipt.id, proposal.id);
+      console.log(`Created Snapshot proposal for Nouns #${proposal.id} (${receipt.id})`);
     } catch (error) {
       console.error(`Error processing proposal ${proposal.id}:`, error);
     }
@@ -103,6 +109,13 @@ async function checkForClosedVotes(): Promise<void> {
             continue;
           }
           voteData = formatted;
+        }
+
+        if (config.dryRun) {
+          console.log(`[DRY RUN] Would vote ${voteData.choice} on Nouns #${nounsId} through the Safe`);
+          submittedVotes.add(snapshotId);
+          pendingVotes.delete(snapshotId);
+          continue;
         }
 
         const execution = await executeVoteThroughSafe(nounsId, voteData.choice, voteData.reason);

@@ -67,6 +67,12 @@ export async function executeVoteThroughSafe(
   voteChoice: VoteChoice,
   formattedReason: string,
 ): Promise<ExecutionResult | null> {
+  // Defense in depth: callers must never be able to execute in dry-run mode.
+  if (config.dryRun) {
+    console.log(`[DRY RUN] Would vote ${voteChoice} on Nouns #${proposalId} through the Safe`);
+    return null;
+  }
+
   const { voteable, status } = await isProposalVoteable(proposalId);
   if (!voteable) {
     console.log(`Cannot vote: Nouns proposal #${proposalId} is ${status}`);
